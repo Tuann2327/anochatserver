@@ -1,6 +1,10 @@
 {
   "name": "serveranochat",
   "version": "1.0.0",
+  "engines": {
+    "npm": "7.20.3",
+    "node": "16.6.1"
+  },
   "description": "",
   "main": "index.js",
   "scripts": {
