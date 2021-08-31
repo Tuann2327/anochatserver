@@ -16,8 +16,10 @@
   "dependencies": {
     "bcrypt": "^5.0.1",
     "cors": "^2.8.5",
+    "express-fileupload": "^1.2.1",
     "express.js": "^1.0.0",
     "mongoose": "^5.13.7",
+    "peer": "^0.6.1",
     "shortid": "^2.2.16",
     "socket.io": "^4.1.3"
   }

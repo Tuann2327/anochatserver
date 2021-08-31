@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const express = require('express')
+const fileUpload = require('express-fileupload')
 const http = require('http')
 const bcrypt = require('bcrypt');
 const cors = require('cors')
@@ -7,6 +8,7 @@ const shortid = require('shortid')
 const Account = require('./models/account.model.js');
 const e = require('cors');
 const fs = require('fs')
+const ExpressPeerServer = require('peer').ExpressPeerServer;
 
 const uri = "mongodb+srv://tuann2327:2327Tm@i@cluster0.urthv.mongodb.net/AnoChatDb?retryWrites=true&w=majority";
 const app = express()
@@ -17,6 +19,8 @@ const port = process.env.PORT || 8080
 app.use(express.urlencoded({extended: true}));
 app.use(express.json({}));
 app.use(cors())
+app.use('/peerjs', ExpressPeerServer(httpServer))
+app.use(fileUpload());
 
 const io = require("socket.io")(httpServer,{
     cors: {
@@ -32,19 +36,75 @@ mongoose.connect(uri, {useNewUrlParser: true, useUnifiedTopology: true});
 
 //socket.io
 const onlineUser = []
+const MatchingUser = []
+
+
+function getRandomInt(max) {
+    return Math.floor(Math.random() * max);
+}
+
+const removeFromMatchingList = (id) =>{
+    MatchingUser.splice(MatchingUser.indexOf(user => user.data.id === id),1)
+}
 
 io.on("connection", socket => {
     console.log(socket.id)
   // or with emit() and custom event names
 
   // handle the event sent with socket.send()
+    socket.on('joinMatching',(data)=>{
+        MatchingUser.push({data:data,socketid:socket.id})
+        const WaitingUser = MatchingUser.filter(user => user.data.id !== data.id)
+        if(WaitingUser.length > 0){
+            const rand = getRandomInt(WaitingUser.length)
+            const roomid = WaitingUser[rand].data.id + data.id
+            io.to(socket.id).emit('foundMatching',{roomid:roomid,user:WaitingUser[rand].data.username})
+            io.to(WaitingUser[rand].socketid).emit('foundMatching',{roomid:roomid,user:data.username})
+            removeFromMatchingList(data.id)
+            removeFromMatchingList(WaitingUser[rand].data.id)
+
+            console.log(MatchingUser)
+        } 
+    })
+
+    socket.on('leaveMatching',data=>{
+        removeFromMatchingList(data.id)
+        console.log(MatchingUser)
+    })
+
+    socket.on('joinRoomID',data=>{
+        socket.leave('general')
+        socket.join(data.id)
+        socket.emit("onBackChat",{type:'announce',user:'Bạn và '+data.user,msg:'đã kết nối thành công'})
+    })
+    socket.on('leaveRoomID',id=>{
+        socket.broadcast.to(id).emit("onBackChat",{type:'announce',user:'Đối phương',msg:'đã rời khỏi phòng chat !!!'})
+        socket.leave(id)
+        socket.join('general')
+    })
+
+    socket.on("joinVideoChat",(data)=>{
+        //data with name and id
+        console.log(data + " joined video chat")
+        socket.broadcast.emit("joinVideoChat",data)
+    })
+
+    socket.on("videoClose",(data)=>{
+        //data with name and id
+        console.log(data + " left video chat")
+        io.emit("videoClose",data)
+    })
+
   socket.on("onChat", (data) => {
-    io.emit("onBackChat",{type:data.type,user:data.user,msg:data.msg,gender:data.gender})
+    console.log(data.roomid)
+    if(data.roomid) io.to(data.roomid).emit("onBackChat",{type:data.type,user:data.user,msg:data.msg,gender:data.gender})
+    else io.to('general').emit("onBackChat",{type:data.type,user:data.user,msg:data.msg,gender:data.gender})
   });
 
   socket.on("onOnline",(data) =>{
     onlineUser.push({id:socket.id,data})
-    io.emit("onBackChat",{type:'announce',user:data.username,msg:'Has joined the chat',onlineUser})
+    socket.join('general')
+    io.to('general').emit("onBackChat",{type:'announce',user:data.username,msg:'Has joined the chat',onlineUser})
   })
 
   socket.on("disconnect", (reason) => {
@@ -53,7 +113,7 @@ io.on("connection", socket => {
     const logoutUser = onlineUser.find(user => user.id === socket.id)
     if(logoutUser){
         onlineUser.splice(onlineUser.indexOf(logoutUser),1)
-        io.emit("onBackChat",{type:'announce',user:logoutUser.data.username,msg:'Has left the chat',onlineUser})
+        io.to('general').emit("onBackChat",{type:'announce',user:logoutUser.data.username,msg:'Has left the chat',onlineUser})
     } 
   });
 
@@ -63,18 +123,19 @@ io.on("connection", socket => {
 
 
 
-app.get('/api/accounts/avt/:gender/:accountid', (req, res) => {
+app.get('/api/accounts/avt/:gender/:username', (req, res) => {
     
     function getRandomInt(max) {
         return Math.floor(Math.random() * max);
     }
-    const id = req.params.accountid
+    const name = req.params.username
     const gender = req.params.gender
     const rand = getRandomInt(5).toString()
     let avt ='haha'
     try {
-        if (fs.existsSync(__dirname+`/avt/${id}.jpg`)) {
-            avt = __dirname+`/avt/${id}.jpg`
+        if (fs.existsSync(__dirname+`/avt/${name}.jpg`)) {
+            console.log('haha')
+            avt = __dirname+`/avt/${name}.jpg`
         }else{
             avt = __dirname+`/avt/${gender+rand}.jpg`
         }
@@ -85,12 +146,6 @@ app.get('/api/accounts/avt/:gender/:accountid', (req, res) => {
     
 })
 
-app.get('/api/accounts/:accountid', (req, res) => {
-
-    res.send('Hello World!')
-    console.log('alo')
-    
-})
 
 app.get('/api/loginauth',async (req, res) => {
 
@@ -153,6 +208,20 @@ app.post('/api/auth', async (req, res) => {
         res.send({isFound: true, accountInfo:{username:foundAccount.username,email:foundAccount.email,id:foundAccount._id,gender:foundAccount.gender,age:foundAccount.age}})
     }else{
         res.send({isFound: false})
+    }
+})
+
+app.post('/api/accounts/setavt/:accountid', async (req, res) => {
+    if(!req.files) res.send('error!')
+    else{
+        const id = req.params.accountid
+        let sampleFile = req.files.file;
+        sampleFile.mv(`./avt/${id}.jpg`, function(err) {
+            if (err)
+            return res.status(500).send(err);
+        
+            res.send('File uploaded!');
+        });
     }
 })
 
