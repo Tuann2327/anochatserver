@@ -75,47 +75,50 @@ io.on("connection", socket => {
     socket.on('joinRoomID',data=>{
         socket.leave('general')
         socket.join(data.id)
-        socket.emit("onBackChat",{type:'announce',user:'Bạn và '+data.user,msg:'đã kết nối thành công'})
+        socket.emit("onBackChat",{type:'announce-avtgreenjoin',user:'Bạn và '+data.user,msg:'đã kết nối thành công'})
     })
     socket.on('leaveRoomID',id=>{
-        socket.broadcast.to(id).emit("onBackChat",{type:'announce',user:'Đối phương',msg:'đã rời khỏi phòng chat !!!'})
+        socket.broadcast.to(id).emit("onBackChat",{type:'announce-avtredleft',user:'Đối phương',msg:'đã rời khỏi phòng chat !!!'})
         socket.leave(id)
         socket.join('general')
     })
 
+    //video call
+
     socket.on("joinVideoChat",(data)=>{
         //data with name and id
-        console.log(data + " joined video chat")
-        socket.broadcast.emit("joinVideoChat",data)
+        // console.log(data + " joined video chat")
+        io.to(data.roomid).emit("joinVideoChat",data)
     })
 
-    socket.on("videoClose",(data)=>{
+    socket.on("closeCall",(id)=>{
         //data with name and id
-        console.log(data + " left video chat")
-        io.emit("videoClose",data)
+        // console.log(data + " left video chat")
+        io.to(id).emit("closeCall")
     })
 
-  socket.on("onChat", (data) => {
-    console.log(data.roomid)
-    if(data.roomid) io.to(data.roomid).emit("onBackChat",{type:data.type,user:data.user,msg:data.msg,gender:data.gender})
-    else io.to('general').emit("onBackChat",{type:data.type,user:data.user,msg:data.msg,gender:data.gender})
-  });
+    socket.on("onChat", (data) => {
+        console.log(data.roomid)
+        if(data.roomid) io.to(data.roomid).emit("onBackChat",{type:data.type,user:data.user,msg:data.msg,gender:data.gender})
+        else io.to('general').emit("onBackChat",{type:data.type,user:data.user,msg:data.msg,gender:data.gender})
+    });
 
-  socket.on("onOnline",(data) =>{
-    onlineUser.push({id:socket.id,data})
-    socket.join('general')
-    io.to('general').emit("onBackChat",{type:'announce',user:data.username,msg:'Has joined the chat',onlineUser})
-  })
+    socket.on("onOnline",(data) =>{
+        onlineUser.push({id:socket.id,data})
+        socket.join('general')
+        // io.to('general').emit("onBackChat",{type:'announce',user:data.username,msg:'Has joined the chat',onlineUser})
+        io.to('general').emit("onBackChat",{onlineUser})
+    })
 
-  socket.on("disconnect", (reason) => {
-      console.log(socket.id)
-      console.log(onlineUser)
-    const logoutUser = onlineUser.find(user => user.id === socket.id)
-    if(logoutUser){
-        onlineUser.splice(onlineUser.indexOf(logoutUser),1)
-        io.to('general').emit("onBackChat",{type:'announce',user:logoutUser.data.username,msg:'Has left the chat',onlineUser})
-    } 
-  });
+    socket.on("disconnect", (reason) => {
+        console.log(socket.id)
+        console.log(onlineUser)
+        const logoutUser = onlineUser.find(user => user.id === socket.id)
+        if(logoutUser){
+            onlineUser.splice(onlineUser.indexOf(logoutUser),1)
+            io.to('general').emit("onBackChat",{onlineUser})
+        } 
+    });
 
 });
 
